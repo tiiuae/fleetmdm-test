@@ -1,0 +1,56 @@
+services:
+  mysql:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    networks:
+      - fleet-network
+    volumes:
+      - mysql:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=fleet123
+      - MYSQL_DATABASE=fleet
+      - MYSQL_USER=fleet
+      - MYSQL_PASSWORD=fleet123
+    # Remove ports section entirely - only expose internally
+
+  redis:
+    image: redis:7
+    networks:
+      - fleet-network
+    volumes:
+      - redis:/data
+    # Remove ports section entirely - only expose internally
+
+  fleet:
+    image: fleetdm/fleet:latest
+    command: sh -c "sleep 30 && /usr/bin/fleet prepare db --no-prompt && /usr/bin/fleet serve"
+    networks:
+      - fleet-network
+    volumes:
+      - type: bind
+        source: ./fleet
+        target: /fleet
+    environment:
+      FLEET_MYSQL_ADDRESS: mysql:3306
+      FLEET_MYSQL_DATABASE: fleet
+      FLEET_MYSQL_USERNAME: root
+      FLEET_MYSQL_PASSWORD: fleet123
+      FLEET_REDIS_ADDRESS: redis:6379
+      FLEET_SERVER_CERT: /fleet/fleet.cert
+      FLEET_SERVER_KEY: /fleet/fleet.key
+      FLEET_OSQUERY_POLICY_UPDATE_INTERVAL: 30s
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+      - redis
+    restart: on-failure
+
+volumes:
+  mysql:
+  redis:
+
+networks:
+  fleet-network:
+    driver: bridge
+
