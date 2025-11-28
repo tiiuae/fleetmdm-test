@@ -1,4 +1,27 @@
 services:
+  traefik:
+    image: traefik:v3.0
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - fleet-network
+    volumes:
+      - letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
   mysql:
     image: mysql:8.0
     command: --default-authentication-plugin=mysql_native_password
@@ -7,11 +30,10 @@ services:
     volumes:
       - mysql:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD=fleet123
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQL_DATABASE=fleet
       - MYSQL_USER=fleet
-      - MYSQL_PASSWORD=fleet123
-    # Remove ports section entirely - only expose internally
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
 
   redis:
     image: redis:7
@@ -19,28 +41,26 @@ services:
       - fleet-network
     volumes:
       - redis:/data
-    # Remove ports section entirely - only expose internally
 
   fleet:
     image: fleetdm/fleet:latest
     command: sh -c "sleep 30 && /usr/bin/fleet prepare db --no-prompt && /usr/bin/fleet serve"
     networks:
       - fleet-network
-    volumes:
-      - type: bind
-        source: ./fleet
-        target: /fleet
     environment:
       FLEET_MYSQL_ADDRESS: mysql:3306
       FLEET_MYSQL_DATABASE: fleet
       FLEET_MYSQL_USERNAME: root
-      FLEET_MYSQL_PASSWORD: fleet123
+      FLEET_MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       FLEET_REDIS_ADDRESS: redis:6379
-      FLEET_SERVER_CERT: /fleet/fleet.cert
-      FLEET_SERVER_KEY: /fleet/fleet.key
+      FLEET_SERVER_ADDRESS: "0.0.0.0:8080"
       FLEET_OSQUERY_POLICY_UPDATE_INTERVAL: 30s
-    ports:
-      - "8080:8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fleet.rule=Host(`${FLEET_HOSTNAME}`)"
+      - "traefik.http.routers.fleet.entrypoints=websecure"
+      - "traefik.http.routers.fleet.tls.certresolver=letsencrypt"
+      - "traefik.http.services.fleet.loadbalancer.server.port=8080"
     depends_on:
       - mysql
       - redis
@@ -49,8 +69,8 @@ services:
 volumes:
   mysql:
   redis:
+  letsencrypt:
 
 networks:
   fleet-network:
     driver: bridge
-
