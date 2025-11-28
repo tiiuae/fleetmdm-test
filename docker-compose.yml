@@ -54,6 +54,7 @@ services:
       FLEET_MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       FLEET_REDIS_ADDRESS: redis:6379
       FLEET_SERVER_ADDRESS: "0.0.0.0:8080"
+      FLEET_SERVER_TLS: "false"
       FLEET_OSQUERY_POLICY_UPDATE_INTERVAL: 30s
     labels:
       - "traefik.enable=true"
